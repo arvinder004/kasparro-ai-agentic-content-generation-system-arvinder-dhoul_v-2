@@ -1,10 +1,10 @@
+# src/graph.py
 import os
 import operator
 from typing import Annotated, TypedDict, List, Dict
 from dotenv import load_dotenv
 
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 
 from src.models import ProductData, CompetitorProduct, UserQuestion, PageOutput, AnalystOutput
@@ -13,7 +13,7 @@ from src.tools import PAGE_TEMPLATES, compare_prices_logic, format_benefits_html
 load_dotenv()
 
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     raw_input: Dict
     product: ProductData
     competitor: CompetitorProduct
@@ -21,18 +21,27 @@ class AgentState(TypedDict):
     generated_pages: Annotated[List[Dict], operator.add] 
 
 
+if not os.environ.get("GEMINI_API_KEY"):
+    raise ValueError("GEMINI_API_KEY is missing from .env file!")
+
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",
+    model="gemini-2.5-flash-lite",
     temperature=0.5,
-    api_key=os.environ["GEMINI_API_KEY"]
+    api_key=os.environ["GEMINI_API_KEY"],
+    max_retries=2,
 )
 
 
+
 def ingest_node(state: AgentState):
-    print("[Analyst Agent] Processing Data...")
+    print("[Analyst] Starting Ingestion...")
     raw = state['raw_input']
     
-    price_float = clean_price_string.invoke(raw["Price"])
+    try:
+        price_float = clean_price_string.invoke(raw["Price"])
+    except Exception as e:
+        print(f"Price cleaning failed: {e}")
+        price_float = 0.0
     
     product = ProductData(
         name=raw["Product Name"],
@@ -45,18 +54,23 @@ def ingest_node(state: AgentState):
         price=price_float
     )
 
+    print("[Analyst] Generating Strategy...")
     analyst_llm = llm.with_structured_output(AnalystOutput)
     
     prompt = f"""
     Analyze this product: {product.model_dump_json()}
     
     Tasks:
-    1. Generate a fictional Competitor Product (Product B) with realistic specs.
-       IMPORTANT: The competitor price must be a float number.
-    2. Generate 15 User Questions categorized into: Informational, Safety, Usage, Purchase, Comparison.
+    1. Generate a fictional Competitor Product (Product B). Price must be a float.
+    2. Generate 15 User Questions (Informational, Safety, Usage, Purchase, Comparison).
     """
     
-    result = analyst_llm.invoke(prompt)
+    try:
+        result = analyst_llm.invoke(prompt)
+        print("[Analyst] Strategy Generated.")
+    except Exception as e:
+        print(f"[Analyst] LLM Failed: {e}")
+        raise e
     
     return {
         "product": product,
@@ -65,10 +79,9 @@ def ingest_node(state: AgentState):
     }
 
 def writer_node_factory(page_key: str):
-
     def write_page(state: AgentState):
         template = PAGE_TEMPLATES[page_key]
-        print(f"[Writer Agent] Building {template['page_type']}...")
+        print(f"[Writer] Writing {template['page_type']}...")
         
         writer_llm = llm.bind_tools([compare_prices_logic, format_benefits_html])
         structured_llm = writer_llm.with_structured_output(PageOutput)
@@ -80,21 +93,20 @@ def writer_node_factory(page_key: str):
         }
         
         prompt = f"""
-        You are an expert Content Architect.
-        
-        Goal: Create a {template['page_type']}.
+        Act as a Content Architect.
+        Target: {template['page_type']}
         Instructions: {template['instructions']}
-        Required Sections: {template['sections']}
+        Sections: {template['sections']}
         
-        Data Context: {context}
-        
-        Rules:
-        1. Use 'compare_prices_logic' tool for price sections.
-        2. Use 'format_benefits_html' tool for benefit lists.
-        3. For Q&A sections, select relevant questions from the provided list and answer them.
+        Context: {context}
         """
         
-        page_obj = structured_llm.invoke(prompt)
+        try:
+            page_obj = structured_llm.invoke(prompt)
+            print(f"[Writer] Finished {template['page_type']}.")
+        except Exception as e:
+            print(f"[Writer] Failed on {page_key}: {e}")
+            raise e
         
         return {"generated_pages": [{page_key: page_obj.model_dump()}]}
 
@@ -110,7 +122,6 @@ workflow.add_node("write_product", writer_node_factory("product"))
 workflow.add_node("write_comparison", writer_node_factory("comparison"))
 
 workflow.set_entry_point("analyst")
-
 workflow.add_edge("analyst", "write_faq")
 workflow.add_edge("write_faq", "write_product")
 workflow.add_edge("write_product", "write_comparison")

@@ -21,12 +21,26 @@ PAGE_TEMPLATES = {
 
 @tool
 def format_benefits_html(benefits: list[str]) -> str:
+    """
+    Converts a list of benefits strings into a single HTML unordered list (<ul>).
+    Useful for formatting content sections.
+    """
     items = "".join([f"<li>{b}</li>" for b in benefits])
     return f"<ul>{items}</ul>"
 
 
 @tool
 def compare_prices_logic(price_a: float, price_b: float, name_a: str, name_b: str) -> str:
+    """
+    Calculates the numerical price difference between two products.
+    Returns a formatted string describing which product is cheaper and by how much.
+    
+    Args:
+        price_a: Price of the primary product.
+        price_b: Price of the competitor product.
+        name_a: Name of the primary product.
+        name_b: Name of the competitor product.
+    """
     diff = price_a - price_b
     if diff < 0:
         return f"{name_a} is cheaper by ₹{abs(diff):.2f}"
@@ -37,6 +51,10 @@ def compare_prices_logic(price_a: float, price_b: float, name_a: str, name_b: st
 
 @tool
 def clean_price_string(price_str: str) -> float:
+    """
+    Extracts a numeric float value from a currency string (e.g., '₹699' -> 699.0).
+    Returns 0.0 if extraction fails.
+    """
     import re
     clean = re.sub(r'[^\d.]', '', str(price_str))
     return float(clean) if clean else 0.0

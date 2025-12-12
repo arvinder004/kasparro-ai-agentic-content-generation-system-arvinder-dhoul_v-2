@@ -1,5 +1,7 @@
+# main.py
 import json
 import os
+import sys
 from src.graph import app
 
 RAW_DATA = {
@@ -14,24 +16,39 @@ RAW_DATA = {
 }
 
 def main():
-    print("Starting...")
-    
-    final_state = app.invoke({"raw_input": RAW_DATA, "generated_pages": []})
-    
+    print("initializing System...")
+  
     os.makedirs("output", exist_ok=True)
+    
+    try:
+        print("Invoking Graph...")
 
-    debug_data = {
-        "product": final_state["product"].model_dump(),
-        "competitor": final_state["competitor"].model_dump(),
-        "questions": [q.model_dump() for q in final_state["questions"]]
-    }
-    with open("output/internal_state.json", "w") as f:
-        json.dump(debug_data, f, indent=2)
+        initial_state = {
+            "raw_input": RAW_DATA, 
+            "generated_pages": []
+        }
         
+        final_state = app.invoke(initial_state)
+        
+        print("Graph Execution Complete")
+        
+        # Save output
+        if "generated_pages" in final_state and final_state["generated_pages"]:
+            print(f"Found {len(final_state['generated_pages'])} pages generated.")
+            for page_entry in final_state["generated_pages"]:
+                for page_type, content in page_entry.items():
+                    filename = f"output/{page_type}.json"
+                    with open(filename, "w") as f:
+                        json.dump(content, f, indent=2)
+                    print(f"   - Saved {filename}")
+        else:
+            print("Warning: No pages were returned in the state.")
+            
+    except Exception as e:
+        print("\n CRITICAL ERROR IN MAIN:")
+        print(e)
+        import traceback
+        traceback.print_exc()
 
-    for page_entry in final_state["generated_pages"]:
-        for page_type, content in page_entry.items():
-            filename = f"output/{page_type}.json"
-            with open(filename, "w") as f:
-                json.dump(content, f, indent=2)
-            print(f"Saved {filename}")
+if __name__ == "__main__":
+    main()

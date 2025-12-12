@@ -1,0 +1,51 @@
+{
+  "page_type": "FAQ Page",
+  "meta_title": "GlowBoost Vitamin C Serum FAQ - Safety and Usage",
+  "meta_description": "Find answers to common questions about the safety and usage of GlowBoost Vitamin C Serum, including application tips and potential side effects.",
+  "sections": [
+    {
+      "heading": "Header",
+      "content": "Frequently Asked Questions about GlowBoost Vitamin C Serum"
+    },
+    {
+      "heading": "Safety Q&A",
+      "content": [
+        {
+          "category": "Safety",
+          "question_text": "What should I do if I experience significant irritation after using the serum?",
+          "answer_text": "If you experience significant irritation, discontinue use immediately and consult a dermatologist. Mild tingling can be normal for sensitive skin."
+        },
+        {
+          "category": "Safety",
+          "question_text": "Is this serum safe to use during pregnancy?",
+          "answer_text": "While Vitamin C is generally safe, it's always best to consult with your doctor or dermatologist before using any new skincare products during pregnancy."
+        },
+        {
+          "category": "Safety",
+          "question_text": "Can I use this serum with other active ingredients like retinol?",
+          "answer_text": "It's generally recommended to avoid using Vitamin C serum with retinol in the same routine to prevent potential irritation. Consider using them at different times of the day (e.g., Vitamin C in the morning, retinol at night)."
+        }
+      ]
+    },
+    {
+      "heading": "Usage Q&A",
+      "content": [
+        {
+          "category": "Usage",
+          "question_text": "How many drops should I use for my face and neck?",
+          "answer_text": "Applying 2\u20133 drops for the face is usually sufficient. You can use an additional drop or two if you also apply it to your neck."
+        },
+        {
+          "category": "Usage",
+          "question_text": "Can I use GlowBoost Vitamin C Serum at night?",
+          "answer_text": "While GlowBoost is formulated for morning use before sunscreen, it can also be used at night. However, be mindful of other active ingredients in your nighttime routine."
+        },
+        {
+          "category": "Usage",
+          "question_text": "How long does it take to see results from using this serum?",
+          "answer_text": "Results can vary, but many users notice a brighter complexion within a few weeks of consistent use. Fading dark spots may take longer, typically 4-8 weeks."
+        }
+      ]
+    }
+  ]
+}
