@@ -1,16 +1,16 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Union, Dict, Literal
+from typing import List, Optional, Union, Literal, Dict
+from pydantic import BaseModel, Field, conlist
+
 
 class ProductData(BaseModel):
-    name: str = Field(description="Name of the product")
+    name: str
     concentration: Optional[str] = None
     skin_type: List[str]
     key_ingredients: List[str]
     benefits: List[str]
     how_to_use: str
     side_effects: Optional[str] = None
-    price: float = Field(description="Price as a float number")
-
+    price: float
 
 class CompetitorProduct(BaseModel):
     name: str
@@ -18,25 +18,25 @@ class CompetitorProduct(BaseModel):
     benefits: List[str]
     price: float
 
-
 class UserQuestion(BaseModel):
     category: Literal["Informational", "Safety", "Usage", "Purchase", "Comparison"]
     question_text: str
-    answer_text: Optional[str] = None
+    answer_text: str
+
+
+class FAQOutputSchema(BaseModel):
+    questions: List[UserQuestion] = Field(min_length=15)
+
+class CompetitorOutputSchema(BaseModel):
+    competitor: CompetitorProduct
 
 
 class PageSection(BaseModel):
     heading: str
-    content: Union[str, List[UserQuestion]] 
-
+    content: Union[str, List[UserQuestion], List[Dict]]
 
 class PageOutput(BaseModel):
     page_type: str
     meta_title: str
     meta_description: str
     sections: List[PageSection]
-
-
-class AnalystOutput(BaseModel):
-    questions: List[UserQuestion]
-    competitor: CompetitorProduct

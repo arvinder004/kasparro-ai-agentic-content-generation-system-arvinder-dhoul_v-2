@@ -1,7 +1,5 @@
-# main.py
-import json
 import os
-import sys
+import json
 from src.graph import app
 
 RAW_DATA = {
@@ -16,37 +14,28 @@ RAW_DATA = {
 }
 
 def main():
-    print("initializing System...")
-  
+    print("Starting Multi-Agent System...")
     os.makedirs("output", exist_ok=True)
-    
-    try:
-        print("Invoking Graph...")
 
-        initial_state = {
-            "raw_input": RAW_DATA, 
-            "generated_pages": []
-        }
+    try:
+        final_state = app.invoke({"raw_input": RAW_DATA, "generated_pages": []})
         
-        final_state = app.invoke(initial_state)
-        
-        print("Graph Execution Complete")
-        
-        # Save output
-        if "generated_pages" in final_state and final_state["generated_pages"]:
-            print(f"Found {len(final_state['generated_pages'])} pages generated.")
-            for page_entry in final_state["generated_pages"]:
-                for page_type, content in page_entry.items():
-                    filename = f"output/{page_type}.json"
+        if "generated_pages" in final_state:
+            for page in final_state["generated_pages"]:
+                for key, content in page.items():
+                    filename = f"output/{key}.json"
                     with open(filename, "w") as f:
                         json.dump(content, f, indent=2)
-                    print(f"   - Saved {filename}")
-        else:
-            print("Warning: No pages were returned in the state.")
-            
+                    print(f"📂 Saved: {filename}")
+                    
+            fq = [p for p in final_state["generated_pages"] if "faq" in p]
+            if fq:
+                faq_content = fq[0]["faq"]
+                count = sum(len(sec['content']) for sec in faq_content['sections'] if isinstance(sec['content'], list))
+                print(f"Final Check: FAQ Page contains {count} questions.")
+
     except Exception as e:
-        print("\n CRITICAL ERROR IN MAIN:")
-        print(e)
+        print(f"Execution Failed: {e}")
         import traceback
         traceback.print_exc()
 
