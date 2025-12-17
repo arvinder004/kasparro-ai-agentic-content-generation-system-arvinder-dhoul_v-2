@@ -2,62 +2,78 @@ import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src.state.state import AgentState
 from src.schemas.models import PageOutput
-from src.tools.logic import PAGE_TEMPLATES, compare_prices_logic, format_benefits_html
+from src.templates.registry import TEMPLATE_REGISTRY, PageLayout
+
+def render_layout_instructions(layout: PageLayout) -> str:
+    """
+    Dynamic Prompt Construction (The Composition Engine).
+    Converts the Python Object Blueprint into strict LLM instructions.
+    """
+    instructions = [f"PAGE GOAL: {layout.page_type_name} - {layout.description}\n"]
+    
+    instructions.append("SECTION BLUEPRINT (You must adhere to this structure):")
+    for idx, section in enumerate(layout.structure, 1):
+        allowed = ", ".join([f"'{b}'" for b in section.allowed_blocks])
+        
+        block_instr = f"""
+        {idx}. SECTION ID: {section.section_id}
+           - Heading: "{section.heading_default}"
+           - Data Sources: {section.data_sources}
+           - Instructions: {section.instructions}
+           - CONSTRAINT: You MUST use one of these Block Types: [{allowed}]
+        """
+        instructions.append(block_instr)
+        
+    return "\n".join(instructions)
 
 def writer_node_factory(page_key: str):
     
     def write_page(state: AgentState):
-        template = PAGE_TEMPLATES[page_key]
-        print(f"[Writer] Building {template['page_type']}...")
+        layout_obj = TEMPLATE_REGISTRY.get(page_key)
+        if not layout_obj:
+            raise ValueError(f"No layout found for {page_key}")
+            
+        print(f"[Writer] Rendering Layout: {layout_obj.page_type_name}...")
         
         llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash-lite",
+            model="gemini-1.5-flash",
             temperature=0.5,
-            api_key=os.environ["GEMINI_API_KEY"],
-            max_retries=2,
+            api_key=os.environ["GEMINI_API_KEY"]
         )
-    
-        writer_llm = llm.bind_tools([compare_prices_logic, format_benefits_html])
-        structured_llm = writer_llm.with_structured_output(PageOutput)
         
-
+        structured_llm = llm.with_structured_output(PageOutput)
+        
         context = {
             "primary": state['product'].model_dump(),
             "competitor": state['competitor'].model_dump(),
             "questions": [q.model_dump() for q in state['questions']]
         }
-
-        block_interface = """
-            VALID BLOCK TYPES (JSON Snippets):
-                - Paragraph: {"type": "text", "html_content": "<p>...</p>"}
-                - List:      {"type": "list", "items": ["..."], "ordered": true/false}
-                - FAQ:       {"type": "faq", "qa_pairs": [{"question_text": "...", "answer_text": "..."}]}
-                - Table:     {"type": "table", "headers": ["..."], "rows": [["..."]]}
-        """
-
+        
+        layout_instructions = render_layout_instructions(layout_obj)
+        
         prompt = f"""
-            ROLE: CMS Content Architect.
-            TARGET: {template['page_type']}
-            SECTIONS: {template['sections']}
-    
-            DATA CONTEXT:
-                {context}
-    
-            {block_interface}
-    
-            INSTRUCTIONS:
-                Map the Data Context to the Required Sections using ONLY the Valid Block Types above.
-                - FAQ Page? -> Must use 'FAQ' block with all 15 questions.
-                - Comparison? -> Must use 'Table' block.
-                - Intro? -> Use 'Paragraph'.
-    
-            SEO:
-                - Generate optimized Title & Slug.
+        ROLE: Headless CMS Renderer.
+        
+        {layout_instructions}
+        
+        DATA CONTEXT:
+        {context}
+        
+        BLOCK DEFINITIONS:
+        - 'text': HTML Paragraphs.
+        - 'list': Bullet points (ordered/unordered).
+        - 'faq': List of Question/Answer objects.
+        - 'table': Headers and Rows.
+        
+        GLOBAL RULES:
+        1. Follow the SECTION BLUEPRINT exactly. Do not add sections not listed.
+        2. Adhere to the 'CONSTRAINT' for block types in each section.
+        3. For SEO, generate a slug based on the primary product name.
         """
         
         result = structured_llm.invoke(prompt)
-        print(f"✅ [Writer] Finished {page_key}.")
+        print(f"[Writer] Rendered {page_key}.")
         
-        return {"generated_pages": [{page_key: result.model_dump()}]}
+        return {"generated_pages": [{page_key: result.model_dump(mode='json')}]}
         
     return write_page
