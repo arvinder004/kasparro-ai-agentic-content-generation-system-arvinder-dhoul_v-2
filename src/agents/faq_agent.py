@@ -3,10 +3,13 @@ import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src.state.state import AgentState
 from src.schemas.models import FAQOutputSchema
+from src.tools.logic import validate_faq_logic
 
 def faq_specialist_node(state: AgentState):
     print("[FAQ Agent] Generating exactly 15 Q&A pairs...")
     
+    product = state['product']
+
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash-lite",
         temperature=0.7,
@@ -15,8 +18,6 @@ def faq_specialist_node(state: AgentState):
     )
     
     structured_llm = llm.with_structured_output(FAQOutputSchema)
-    
-    product = state['product']
     
     base_prompt = f"""
     CONTEXT: {product.model_dump_json()}
@@ -36,14 +37,25 @@ def faq_specialist_node(state: AgentState):
     """
     
     max_retries = 3
+    current_prompt = base_prompt
+    
     for i in range(max_retries):
         try:
-            result = structured_llm.invoke(base_prompt)
-            print(f"[FAQ Specialist] Generated {len(result.questions)} questions.")
-            return {"questions": result.questions}
+            result = structured_llm.invoke(current_prompt)
             
+            # --- USE IMPORTED VALIDATION LOGIC ---
+            validation_msg = validate_faq_logic(result.questions)
+            
+            if validation_msg == "VALID":
+                print(f"[FAQ Specialist] Validation Passed: 15 Unique Questions (3/category).")
+                return {"questions": result.questions}
+            else:
+                print(f"[FAQ Specialist] Attempt {i+1} Failed Validation:\n{validation_msg}")
+                # Feedback Loop
+                current_prompt = base_prompt + f"\n\n[SYSTEM ERROR - FIX REQUIRED]:\n{validation_msg}\n\nPlease regenerate the ENTIRE list to fix these specific errors."
+                
         except Exception as e:
-            print(f"[FAQ Specialist] Attempt {i+1} Failed: {str(e)}")
-            base_prompt += f"\n\n[ERROR]: Previous attempt failed validation. {str(e)}. Ensure exactly 15 items."
+            print(f"[FAQ Specialist] Attempt {i+1} Exception: {str(e)}")
+            current_prompt += f"\n\n[ERROR]: {str(e)}"
             
-    raise ValueError("Failed to generate 15 valid questions.")
+    raise ValueError("Failed to generate 15 valid questions after 3 attempts.")

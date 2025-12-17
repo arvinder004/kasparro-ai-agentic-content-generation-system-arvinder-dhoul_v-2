@@ -3,7 +3,7 @@ import os
 from langchain_google_genai import ChatGoogleGenerativeAI
 from src.state.state import AgentState
 from src.schemas.models import ProductData, CompetitorOutputSchema
-from src.tools.logic import clean_price_string
+from src.tools.logic import clean_price_string, validate_competitor_logic
 
 def analyst_node(state: AgentState):
     print("[Analyst] Ingesting & Cleaning Data...")
@@ -54,9 +54,29 @@ def analyst_node(state: AgentState):
     
         OUTPUT: Valid JSON 'CompetitorProduct'.
     """
-    result = structured_llm.invoke(prompt)
     
-    return {
-        "product": product,
-        "competitor": result.competitor
-    }
+    max_retries = 3
+    current_prompt = prompt
+    
+    for i in range(max_retries):
+        try:
+            result = structured_llm.invoke(current_prompt)
+            
+            # --- USE IMPORTED VALIDATION LOGIC ---
+            val_msg = validate_competitor_logic(product, result.competitor)
+            
+            if val_msg == "VALID":
+                print("✅ [Analyst] Competitor Generated & Validated.")
+                return {
+                    "product": product,
+                    "competitor": result.competitor
+                }
+            else:
+                print(f"⚠️ [Analyst] Competitor Validation Failed: {val_msg}")
+                current_prompt = prompt + f"\n\n[SYSTEM ERROR]: {val_msg}. Regenerate."
+                
+        except Exception as e:
+            print(f"⚠️ [Analyst] Error: {e}")
+            current_prompt += f"\n[ERROR]: {e}"
+
+    raise ValueError("Failed to generate valid competitor.")

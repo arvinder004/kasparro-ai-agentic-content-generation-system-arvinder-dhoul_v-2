@@ -1,6 +1,8 @@
 import re
 from typing import List
 from langchain_core.tools import tool
+from collections import Counter
+from src.schemas.models import ProductData, CompetitorProduct, UserQuestion
 
 
 PAGE_TEMPLATES = {
@@ -20,6 +22,56 @@ PAGE_TEMPLATES = {
         "sections": ["Head-to-Head", "Price Analysis", "Verdict"]
     }
 }
+
+
+def validate_faq_logic(questions: List[UserQuestion]) -> str:
+    """
+    Validates FAQ list for Count (15), Uniqueness, and Category Distribution (3 each).
+    Returns 'VALID' or a specific error message.
+    """
+    errors = []
+    
+    # 1. Count Constraint
+    if len(questions) != 15:
+        errors.append(f"COUNT ERROR: Expected 15 questions, got {len(questions)}.")
+        
+    # 2. Uniqueness Constraint
+    seen_texts = set()
+    duplicates = []
+    for q in questions:
+        clean_text = q.question_text.strip().lower()
+        if clean_text in seen_texts:
+            duplicates.append(q.question_text)
+        seen_texts.add(clean_text)
+    
+    if duplicates:
+        errors.append(f"UNIQUENESS ERROR: Found duplicate questions: {duplicates[:3]}...")
+
+    # 3. Category Coverage Constraint
+    required_cats = ["Informational", "Safety", "Usage", "Purchase", "Comparison"]
+    counts = Counter(q.category for q in questions)
+    
+    for cat in required_cats:
+        if counts[cat] != 3:
+            errors.append(f"DISTRIBUTION ERROR: Category '{cat}' has {counts[cat]} items. Expected exactly 3.")
+    
+    if not errors:
+        return "VALID"
+    
+    return "\n".join(errors)
+
+def validate_competitor_logic(primary: ProductData, competitor: CompetitorProduct) -> str:
+    """
+    Enforces that the competitor is distinct from the primary product.
+    """
+    if competitor.name.lower() == primary.name.lower():
+        return "Competitor name cannot be the same as Primary Product name."
+    
+    # Check for identical price
+    if competitor.price_info.amount == primary.price_info.amount:
+        return "Competitor price cannot be identical. Make it higher or lower."
+        
+    return "VALID"
 
 
 @tool
