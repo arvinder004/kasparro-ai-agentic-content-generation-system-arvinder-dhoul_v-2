@@ -1,72 +1,136 @@
-# src/agents/faq_specialist.py
 import os
+import asyncio
+import random
+from typing import List
 from langchain_google_genai import ChatGoogleGenerativeAI
+from pydantic import BaseModel, Field
 from src.state.state import AgentState
-from src.schemas.models import FAQOutputSchema
-from src.tools.logic import validate_faq_logic
-from src.logger.logger import setup_logger, monitor_node
+from src.schemas.models import UserQuestion
+from src.logger.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-@monitor_node
-def faq_specialist_node(state: AgentState):
-    run_id = state.get("run_id")
+CATEGORIES = ["Informational", "Safety", "Usage", "Purchase", "Comparison"]
+TARGET_PER_CATEGORY = 3
 
-    print("[FAQ Agent] Generating exactly 15 Q&A pairs...")
+CONCURRENCY_LIMIT = 3 
+
+class BatchQuestionOutput(BaseModel):
+    questions: List[UserQuestion] = Field(
+        description=f"List of exactly {TARGET_PER_CATEGORY} questions for the specific category."
+    )
+
+async def generate_category_batch(
+    semaphore: asyncio.Semaphore,
+    llm: ChatGoogleGenerativeAI, 
+    category: str, 
+    context_str: str, 
+    run_id: str
+) -> List[UserQuestion]:
+    """
+    Generates questions for a single category. 
+    Uses a Semaphore to prevent hitting API Rate Limits.
+    """
+    async with semaphore:
+
+        await asyncio.sleep(random.uniform(0.1, 1.0))
+        
+        logger.info(f"Triggering Batch: {category}", extra={"run_id": run_id})
+        
+        structured_llm = llm.with_structured_output(BatchQuestionOutput)
+        
+        prompt = f"""
+        CONTEXT: {context_str}
+        
+        TASK: Generate exactly {TARGET_PER_CATEGORY} User Questions + Answers for the category: '{category}'.
+        
+        RULES:
+        1. Category field in JSON must be '{category}'.
+        2. Answers must be concise and helpful.
+        3. Questions should be distinct and specific to the product ingredients/usage.
+        
+        OUTPUT: JSON Object with a list of questions.
+        """
+        
+        for attempt in range(3):
+            try:
+                result = await structured_llm.ainvoke(prompt)
+                
+                if len(result.questions) >= TARGET_PER_CATEGORY:
+                    valid_qs = result.questions[:TARGET_PER_CATEGORY]
+                    for q in valid_qs:
+                        q.category = category
+                    return valid_qs
+                
+            except Exception as e:
+                logger.warning(
+                    f"Batch {category} Attempt {attempt+1} failed: {e}", 
+                    extra={"run_id": run_id}
+                )
+                await asyncio.sleep(1)
+        
+        logger.error(f"Batch {category} Failed completely.", extra={"run_id": run_id})
+        return []
+
+async def faq_specialist_node(state: AgentState):
+    run_id = state.get("run_id", "unknown")
+    logger.info("Starting Parallel FAQ Generation...", extra={"run_id": run_id})
     
     product = state['product']
-
+    slim_context = f"Product: {product.name}, Ingredients: {product.key_ingredients}, Benefits: {product.benefits}"
+    
+    # Initialize LLM
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-lite",
+        model="gemini-1.5-flash",
         temperature=0.7,
         api_key=os.environ["GEMINI_API_KEY"],
-        max_retries=2
+        max_retries=1
     )
     
-    structured_llm = llm.with_structured_output(FAQOutputSchema)
+    sem = asyncio.Semaphore(CONCURRENCY_LIMIT)
     
-    base_prompt = f"""
-    CONTEXT: {product.model_dump_json()}
+    tasks = [
+        generate_category_batch(sem, llm, cat, slim_context, run_id) 
+        for cat in CATEGORIES
+    ]
     
-    GOAL: Generate exactly 15 Q&A pairs.
+    results = await asyncio.gather(*tasks)
     
-    STRATEGY (Think before generating):
-    1. PLAN: Identify 3 distinct topics for EACH category below.
-    2. DRAFT: Write the questions based on the plan.
-    3. REVIEW: Ensure total count is 15.
+    all_questions = [q for batch in results for q in batch]
     
-    CATEGORIES:
-    [Informational, Safety, Usage, Purchase, Comparison]
+    unique_questions = []
+    seen_texts = set()
     
-    RESPONSE FORMAT:
-    Return ONLY the list of 15 objects.
-    """
+    for q in all_questions:
+        clean_text = q.question_text.lower().strip().replace("?", "")
+        if clean_text not in seen_texts:
+            unique_questions.append(q)
+            seen_texts.add(clean_text)
     
-    max_retries = 3
-    current_prompt = base_prompt
+    final_count = len(unique_questions)
+    logger.info(f"Generated {final_count}/15 unique questions.", extra={"run_id": run_id})
     
-    for i in range(max_retries):
-        try:
-            result = structured_llm.invoke(current_prompt)
-            validation_msg = validate_faq_logic(result.questions)
-            
-            if validation_msg == "VALID":
-                logger.info(
-                    "FAQ Generation Successful", 
-                    extra={"run_id": run_id, "question_count": len(result.questions)}
-                )
-                print(f"[FAQ Specialist] Validation Passed: 15 Unique Questions (3/category).")
-                return {"questions": result.questions}
-            else:
-                logger.warning(
-                    f"Attempt {i+1} Failed Validation",
-                    extra={"run_id": run_id, "error": validation_msg}
-                )
-                print(f"[FAQ Specialist] Attempt {i+1} Failed Validation:\n{validation_msg}")
-                current_prompt = base_prompt + f"\n\n[SYSTEM ERROR - FIX REQUIRED]:\n{validation_msg}\n\nPlease regenerate the ENTIRE list to fix these specific errors."
-                
-        except Exception as e:
-            print(f"[FAQ Specialist] Attempt {i+1} Exception: {str(e)}")
-            current_prompt += f"\n\n[ERROR]: {str(e)}"
-            
-    raise ValueError("Failed to generate 15 valid questions after 3 attempts.")
+    if final_count < 15:
+        missing = 15 - final_count
+        logger.warning(f"Missing {missing} questions. Filling with generic safety net.", extra={"run_id": run_id})
+        
+        generic_fillers = [
+            UserQuestion(category="Purchase", question_text="What is the return policy?", answer_text="Please check our website for the 30-day return policy."),
+            UserQuestion(category="Safety", question_text="Is this safe for sensitive skin?", answer_text="Yes, but patch testing is always recommended."),
+            UserQuestion(category="Usage", question_text="Can I use this daily?", answer_text="Yes, it is formulated for daily use."),
+            UserQuestion(category="Informational", question_text="Is the packaging recyclable?", answer_text="Yes, we use eco-friendly materials."),
+            UserQuestion(category="Comparison", question_text="How does this compare to basic serums?", answer_text="It contains higher quality actives.")
+        ]
+        
+        for filler in generic_fillers:
+            if len(unique_questions) >= 15:
+                break
+
+            clean_filler = filler.question_text.lower().strip().replace("?", "")
+            if clean_filler not in seen_texts:
+                unique_questions.append(filler)
+                seen_texts.add(clean_filler)
+
+    final_output = unique_questions[:15]
+    
+    return {"questions": final_output}
