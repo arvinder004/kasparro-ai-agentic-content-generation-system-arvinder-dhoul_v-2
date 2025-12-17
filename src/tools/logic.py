@@ -67,8 +67,7 @@ def validate_competitor_logic(primary: ProductData, competitor: CompetitorProduc
     if competitor.name.lower() == primary.name.lower():
         return "Competitor name cannot be the same as Primary Product name."
     
-    # Check for identical price
-    if competitor.price_info.amount == primary.price_info.amount:
+    if competitor.price == primary.price:
         return "Competitor price cannot be identical. Make it higher or lower."
         
     return "VALID"

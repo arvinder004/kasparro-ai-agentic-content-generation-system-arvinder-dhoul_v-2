@@ -4,7 +4,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from src.state.state import AgentState
 from src.schemas.models import ProductData, CompetitorOutputSchema
 from src.tools.logic import clean_price_string, validate_competitor_logic
+from src.logger.logger import setup_logger, monitor_node
 
+logger = setup_logger(__name__)
+
+@monitor_node
 def analyst_node(state: AgentState):
     print("[Analyst] Ingesting & Cleaning Data...")
     raw = state['raw_input']
@@ -21,6 +25,8 @@ def analyst_node(state: AgentState):
         side_effects=raw["Side Effects"],
         price=price_val
     )
+
+    logger.info("Generating Competitor Profile...", extra={"run_id": state.get("run_id")})
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash-lite",
@@ -42,8 +48,8 @@ def analyst_node(state: AgentState):
         TASK: Generate a DIRECT COMPETITOR profile for: '{product.name}'.
     
         INPUT DATA:
-            - Type: {product.skin_types}
-            - Price: {product.price_info.amount} {product.price_info.currency}
+            - Type: {product.skin_type}
+            - Price: {product.price} {product.price}
             {f"- Ingredients: {product.key_ingredients}" if product.key_ingredients else ""}
     
         CONSTRAINTS:
@@ -62,21 +68,20 @@ def analyst_node(state: AgentState):
         try:
             result = structured_llm.invoke(current_prompt)
             
-            # --- USE IMPORTED VALIDATION LOGIC ---
             val_msg = validate_competitor_logic(product, result.competitor)
             
             if val_msg == "VALID":
-                print("✅ [Analyst] Competitor Generated & Validated.")
+                print("[Analyst] Competitor Generated & Validated.")
                 return {
                     "product": product,
                     "competitor": result.competitor
                 }
             else:
-                print(f"⚠️ [Analyst] Competitor Validation Failed: {val_msg}")
+                print(f"[Analyst] Competitor Validation Failed: {val_msg}")
                 current_prompt = prompt + f"\n\n[SYSTEM ERROR]: {val_msg}. Regenerate."
                 
         except Exception as e:
-            print(f"⚠️ [Analyst] Error: {e}")
+            print(f"[Analyst] Error: {e}")
             current_prompt += f"\n[ERROR]: {e}"
 
     raise ValueError("Failed to generate valid competitor.")

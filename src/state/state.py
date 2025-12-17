@@ -7,6 +7,7 @@ class AgentState(TypedDict, total=False):
     The Single Source of Truth for the Graph.
     total=False allows fields to be None initially.
     """
+    run_id: str
     raw_input: Dict
     
     product: ProductData

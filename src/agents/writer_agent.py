@@ -3,6 +3,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from src.state.state import AgentState
 from src.schemas.models import PageOutput
 from src.templates.registry import TEMPLATE_REGISTRY, PageLayout
+from src.logger.logger import setup_logger, monitor_node
+
+logger = setup_logger(__name__)
 
 def render_layout_instructions(layout: PageLayout) -> str:
     """
@@ -27,16 +30,20 @@ def render_layout_instructions(layout: PageLayout) -> str:
     return "\n".join(instructions)
 
 def writer_node_factory(page_key: str):
-    
+
+    @monitor_node
     def write_page(state: AgentState):
+        run_id = state.get("run_id")
+
         layout_obj = TEMPLATE_REGISTRY.get(page_key)
         if not layout_obj:
             raise ValueError(f"No layout found for {page_key}")
-            
+
+        logger.info(f"Rendering {page_key}...", extra={"run_id": run_id})   
         print(f"[Writer] Rendering Layout: {layout_obj.page_type_name}...")
         
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash-lite",
             temperature=0.5,
             api_key=os.environ["GEMINI_API_KEY"]
         )

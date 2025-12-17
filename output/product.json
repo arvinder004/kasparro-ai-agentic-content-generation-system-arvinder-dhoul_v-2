@@ -1,0 +1,43 @@
+{
+  "page_type": "Product Detail Page",
+  "meta_title": "GlowBoost Vitamin C Serum - Brighten and Fade Dark Spots",
+  "meta_description": "Discover the power of GlowBoost Vitamin C Serum with 10% Vitamin C and Hyaluronic Acid. Brighten your skin, fade dark spots, and achieve a radiant complexion. Suitable for oily and combination skin.",
+  "sections": [
+    {
+      "heading": "Product Overview",
+      "content": [
+        {
+          "block_type": "text",
+          "text": "Unleash your skin's radiance with GlowBoost Vitamin C Serum! This potent formula, featuring a 10% Vitamin C concentration, is your secret weapon against dullness and dark spots. Get ready for a brighter, more luminous complexion that glows from within. Experience the transformative power of Vitamin C and Hyaluronic Acid in every drop!"
+        }
+      ]
+    },
+    {
+      "heading": "Key Benefits",
+      "content": [
+        {
+          "block_type": "list",
+          "list_items": [
+            "Brightens skin tone for a radiant complexion.",
+            "Effectively fades the appearance of dark spots and hyperpigmentation.",
+            "Infused with Hyaluronic Acid to hydrate and plump the skin."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "How to Use",
+      "content": [
+        {
+          "block_type": "list",
+          "list_items": [
+            "In the morning, cleanse your face.",
+            "Apply 2\u20133 drops of GlowBoost Vitamin C Serum onto your fingertips.",
+            "Gently pat the serum onto your face and neck.",
+            "Follow up with your favorite moisturizer and sunscreen."
+          ]
+        }
+      ]
+    }
+  ]
+}

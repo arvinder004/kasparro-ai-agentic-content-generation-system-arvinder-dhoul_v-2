@@ -4,8 +4,14 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from src.state.state import AgentState
 from src.schemas.models import FAQOutputSchema
 from src.tools.logic import validate_faq_logic
+from src.logger.logger import setup_logger, monitor_node
 
+logger = setup_logger(__name__)
+
+@monitor_node
 def faq_specialist_node(state: AgentState):
+    run_id = state.get("run_id")
+
     print("[FAQ Agent] Generating exactly 15 Q&A pairs...")
     
     product = state['product']
@@ -42,16 +48,21 @@ def faq_specialist_node(state: AgentState):
     for i in range(max_retries):
         try:
             result = structured_llm.invoke(current_prompt)
-            
-            # --- USE IMPORTED VALIDATION LOGIC ---
             validation_msg = validate_faq_logic(result.questions)
             
             if validation_msg == "VALID":
+                logger.info(
+                    "FAQ Generation Successful", 
+                    extra={"run_id": run_id, "question_count": len(result.questions)}
+                )
                 print(f"[FAQ Specialist] Validation Passed: 15 Unique Questions (3/category).")
                 return {"questions": result.questions}
             else:
+                logger.warning(
+                    f"Attempt {i+1} Failed Validation",
+                    extra={"run_id": run_id, "error": validation_msg}
+                )
                 print(f"[FAQ Specialist] Attempt {i+1} Failed Validation:\n{validation_msg}")
-                # Feedback Loop
                 current_prompt = base_prompt + f"\n\n[SYSTEM ERROR - FIX REQUIRED]:\n{validation_msg}\n\nPlease regenerate the ENTIRE list to fix these specific errors."
                 
         except Exception as e:

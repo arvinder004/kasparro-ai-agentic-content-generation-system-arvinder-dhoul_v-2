@@ -1,6 +1,11 @@
 import os
 import json
+import uuid        
+import traceback
 from src.graph import app
+from src.logger.logger import setup_logger
+
+logger = setup_logger("main")
 
 RAW_DATA = {
     "Product Name": "GlowBoost Vitamin C Serum",
@@ -14,11 +19,23 @@ RAW_DATA = {
 }
 
 def main():
+    run_id = str(uuid.uuid4())
+    
+    logger.info("Starting System Execution", extra={"run_id": run_id})
+
     print("Starting Multi-Agent System...")
     os.makedirs("output", exist_ok=True)
 
     try:
-        final_state = app.invoke({"raw_input": RAW_DATA, "generated_pages": []})
+        initial_state = {
+            "run_id": run_id, 
+            "raw_input": RAW_DATA, 
+            "generated_pages": []
+        }
+
+        final_state = app.invoke(initial_state)
+
+        logger.info("Execution Complete. Saving files...", extra={"run_id": run_id})
         
         if "generated_pages" in final_state:
             for page in final_state["generated_pages"]:
@@ -26,7 +43,7 @@ def main():
                     filename = f"output/{key}.json"
                     with open(filename, "w") as f:
                         json.dump(content, f, indent=2)
-                    print(f"📂 Saved: {filename}")
+                    print(f"Saved: {filename}")
                     
             fq = [p for p in final_state["generated_pages"] if "faq" in p]
             if fq:
@@ -35,8 +52,8 @@ def main():
                 print(f"Final Check: FAQ Page contains {count} questions.")
 
     except Exception as e:
+        logger.error(f"Execution Crashed: {e}", extra={"run_id": run_id})
         print(f"Execution Failed: {e}")
-        import traceback
         traceback.print_exc()
 
 if __name__ == "__main__":
