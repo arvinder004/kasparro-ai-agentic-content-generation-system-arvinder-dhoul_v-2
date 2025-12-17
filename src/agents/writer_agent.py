@@ -26,19 +26,33 @@ def writer_node_factory(page_key: str):
             "competitor": state['competitor'].model_dump(),
             "questions": [q.model_dump() for q in state['questions']]
         }
-        
+
+        block_interface = """
+            VALID BLOCK TYPES (JSON Snippets):
+                - Paragraph: {"type": "text", "html_content": "<p>...</p>"}
+                - List:      {"type": "list", "items": ["..."], "ordered": true/false}
+                - FAQ:       {"type": "faq", "qa_pairs": [{"question_text": "...", "answer_text": "..."}]}
+                - Table:     {"type": "table", "headers": ["..."], "rows": [["..."]]}
+        """
+
         prompt = f"""
-        Act as a Content Architect.
-        Target: {template['page_type']}
-        Instructions: {template['instructions']}
-        Required Sections: {template['sections']}
-        
-        Data Context: {context}
-        
-        Rules:
-        1. Use 'compare_prices_logic' for price comparisons.
-        2. Use 'format_benefits_html' for lists.
-        3. IF this is the FAQ Page, you MUST include ALL 15 questions from the context.
+            ROLE: CMS Content Architect.
+            TARGET: {template['page_type']}
+            SECTIONS: {template['sections']}
+    
+            DATA CONTEXT:
+                {context}
+    
+            {block_interface}
+    
+            INSTRUCTIONS:
+                Map the Data Context to the Required Sections using ONLY the Valid Block Types above.
+                - FAQ Page? -> Must use 'FAQ' block with all 15 questions.
+                - Comparison? -> Must use 'Table' block.
+                - Intro? -> Use 'Paragraph'.
+    
+            SEO:
+                - Generate optimized Title & Slug.
         """
         
         result = structured_llm.invoke(prompt)

@@ -32,7 +32,28 @@ def analyst_node(state: AgentState):
     print("[Analyst] Generating Competitor Profile...")
     structured_llm = llm.with_structured_output(CompetitorOutputSchema)
     
-    prompt = f"Generate a realistic competitor (Product B) for: {product.name}. Price must be a float."
+    ingredient_rule = ""
+    if product.key_ingredients:
+        ingredient_rule = "- Ingredients: Must share 1 key ingredient, add 1 unique active."
+    else:
+        ingredient_rule = "- Specs: Compare material quality or durability instead of ingredients."
+
+    prompt = f"""
+        TASK: Generate a DIRECT COMPETITOR profile for: '{product.name}'.
+    
+        INPUT DATA:
+            - Type: {product.skin_types}
+            - Price: {product.price_info.amount} {product.price_info.currency}
+            {f"- Ingredients: {product.key_ingredients}" if product.key_ingredients else ""}
+    
+        CONSTRAINTS:
+            1. Name: Realistic brand (e.g., 'DermaPure'). NO 'Product B'.
+            2. Pricing: Target 15-20% difference (Higher or Lower).
+            3. Differentiation:
+                {ingredient_rule}
+    
+        OUTPUT: Valid JSON 'CompetitorProduct'.
+    """
     result = structured_llm.invoke(prompt)
     
     return {

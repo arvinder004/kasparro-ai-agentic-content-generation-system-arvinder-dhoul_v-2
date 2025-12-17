@@ -19,12 +19,20 @@ def faq_specialist_node(state: AgentState):
     product = state['product']
     
     base_prompt = f"""
-    Context: {product.model_dump_json()}
+    CONTEXT: {product.model_dump_json()}
     
-    Task: Generate exactly 15 User Questions with concise Answers.
+    GOAL: Generate exactly 15 Q&A pairs.
     
-    Required Distribution (3 per category):
-    1. Informational, 2. Safety, 3. Usage, 4. Purchase, 5. Comparison
+    STRATEGY (Think before generating):
+    1. PLAN: Identify 3 distinct topics for EACH category below.
+    2. DRAFT: Write the questions based on the plan.
+    3. REVIEW: Ensure total count is 15.
+    
+    CATEGORIES:
+    [Informational, Safety, Usage, Purchase, Comparison]
+    
+    RESPONSE FORMAT:
+    Return ONLY the list of 15 objects.
     """
     
     max_retries = 3
